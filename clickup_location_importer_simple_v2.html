@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClickUp Store Location Importer</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #131a2d;
+    --panel-2: #18223a;
+    --text: #edf2ff;
+    --muted: #9eabc7;
+    --line: #2a3657;
+    --accent: #7b68ee;
+    --accent-2: #49ccf9;
+    --ok: #39d98a;
+    --warn: #ffcc66;
+    --bad: #ff6b7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: radial-gradient(circle at top right, #1c2750 0, var(--bg) 35%);
+    color: var(--text);
+  }
+  .wrap { width: min(1100px, calc(100% - 32px)); margin: 32px auto; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+  h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 44px); letter-spacing: -0.03em; }
+  .subtitle { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.55; }
+  .badge { white-space: nowrap; background: rgba(57,217,138,.12); color: var(--ok); border: 1px solid rgba(57,217,138,.3); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card { background: rgba(19,26,45,.94); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.22); }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 { font-size: 17px; margin: 0 0 16px; }
+  label { display: block; color: var(--muted); font-size: 13px; margin: 14px 0 7px; }
+  input, select, button { font: inherit; }
+  input[type="text"], input[type="password"], input[type="file"], select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 11px; padding: 12px 13px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(73,204,249,.12); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+  .check input { width: auto; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  button { border: 0; border-radius: 11px; padding: 12px 16px; cursor: pointer; font-weight: 800; }
+  button.primary { color: white; background: linear-gradient(135deg, var(--accent), #5b8cff); }
+  button.secondary { color: var(--text); background: var(--panel-2); border: 1px solid var(--line); }
+  button.danger { color: white; background: #7c2d3a; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .drop { border: 1px dashed #53648f; border-radius: 13px; padding: 24px; text-align: center; background: rgba(123,104,238,.06); }
+  .drop.drag { border-color: var(--accent-2); background: rgba(73,204,249,.10); }
+  .file-name { margin-top: 9px; color: var(--accent-2); font-weight: 700; font-size: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; padding: 14px; }
+  .stat strong { display:block; font-size: 25px; margin-top: 3px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .progress-shell { height: 12px; background: #0d1427; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 18px 0 8px; }
+  .progress { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s ease; }
+  .status-line { color: var(--muted); font-size: 13px; min-height: 20px; }
+  .log { height: 290px; overflow: auto; background: #080d1a; border: 1px solid var(--line); border-radius: 13px; padding: 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .info { color: var(--accent-2); }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 10px; }
+  .hidden { display:none !important; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } .card.full { grid-column: auto; } .stats { grid-template-columns: repeat(2,1fr); } .header { flex-direction: column; } .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>ClickUp Location Importer</h1>
+      <p class="subtitle">Create one ClickUp task per store and populate the <strong>Location</strong> custom field so the stores appear in Map View.</p>
+    </div>
+    <div class="badge">Runs locally in your browser</div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. ClickUp connection</h2>
+      <label for="token">Personal API token</label>
+      <input id="token" type="password" autocomplete="off" placeholder="pk_..." />
+      <div class="row">
+        <div>
+          <label for="listId">List ID</label>
+          <input id="listId" type="text" value="901220131374" />
+        </div>
+        <div>
+          <label for="fieldName">Location field name</label>
+          <input id="fieldName" type="text" value="Location" />
+        </div>
+      </div>
+      <label for="googleKey">Google Geocoding API key (optional)</label>
+      <input id="googleKey" type="password" autocomplete="off" placeholder="Leave blank to use OpenStreetMap" />
+      <p class="note">Your token is not saved by this file. If Latitude and Longitude are included in the CSV, the importer skips geocoding for that row. OpenStreetMap is slower and is limited to approximately one address per second.</p>
+      <div class="actions">
+        <button id="testBtn" class="secondary">Test connection</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. Select CSV</h2>
+      <div id="drop" class="drop">
+        <strong>Drop the CSV here</strong><br />
+        <span class="note">or select it below</span><br><span class="note">Optional columns: Latitude and Longitude</span>
+        <label for="csvFile" style="margin-top:14px">CSV file</label>
+        <input id="csvFile" type="file" accept=".csv,text/csv" />
+        <div id="fileName" class="file-name"></div>
+      </div>
+      <div class="checks">
+        <label class="check"><input id="dryRun" type="checkbox" checked /> Test first row only</label>
+        <label class="check"><input id="skipDuplicates" type="checkbox" /> Skip duplicate task names</label>
+      </div>
+      <div class="actions">
+        <button id="previewBtn" class="secondary" disabled>Preview CSV</button>
+        <button id="importBtn" class="primary" disabled>Start import</button>
+        <button id="stopBtn" class="danger" disabled>Stop</button>
+      </div>
+    </section>
+
+    <section class="card full">
+      <h2>Import status</h2>
+      <div class="stats">
+        <div class="stat"><span>Rows</span><strong id="rowsStat">0</strong></div>
+        <div class="stat"><span>Processed</span><strong id="processedStat">0</strong></div>
+        <div class="stat"><span>Created</span><strong id="createdStat">0</strong></div>
+        <div class="stat"><span>Skipped</span><strong id="skippedStat">0</strong></div>
+        <div class="stat"><span>Failed</span><strong id="failedStat">0</strong></div>
+      </div>
+      <div class="progress-shell"><div id="progress" class="progress"></div></div>
+      <div id="statusLine" class="status-line">Select a CSV to begin.</div>
+      <div class="actions">
+        <button id="downloadFailures" class="secondary" disabled>Download failures CSV</button>
+      </div>
+    </section>
+
+    <section class="card full">
+      <h2>Activity log</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </div>
+</div>
+<script>
+(() => {
+  const API = 'https://api.clickup.com/api/v2';
+  const $ = id => document.getElementById(id);
+  const state = { rows: [], failures: [], stopped: false, running: false, existingNames: null };
+
+  const els = {
+    token: $('token'), listId: $('listId'), fieldName: $('fieldName'), googleKey: $('googleKey'),
+    csvFile: $('csvFile'), fileName: $('fileName'), drop: $('drop'), dryRun: $('dryRun'),
+    skipDuplicates: $('skipDuplicates'), testBtn: $('testBtn'), previewBtn: $('previewBtn'),
+    importBtn: $('importBtn'), stopBtn: $('stopBtn'), downloadFailures: $('downloadFailures'),
+    log: $('log'), progress: $('progress'), statusLine: $('statusLine'),
+    rowsStat: $('rowsStat'), processedStat: $('processedStat'), createdStat: $('createdStat'),
+    skippedStat: $('skippedStat'), failedStat: $('failedStat')
+  };
+
+  function log(message, cls='') {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    els.log.appendChild(line);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  function setStatus(text) { els.statusLine.textContent = text; }
+  function setRunning(on) {
+    state.running = on;
+    els.importBtn.disabled = on || !state.rows.length;
+    els.previewBtn.disabled = on || !state.rows.length;
+    els.testBtn.disabled = on;
+    els.stopBtn.disabled = !on;
+    els.csvFile.disabled = on;
+  }
+  function updateStats({processed=0, created=0, skipped=0, failed=0, total=state.rows.length}={}) {
+    els.rowsStat.textContent = total;
+    els.processedStat.textContent = processed;
+    els.createdStat.textContent = created;
+    els.skippedStat.textContent = skipped;
+    els.failedStat.textContent = failed;
+    els.progress.style.width = total ? `${Math.min(100, processed/total*100)}%` : '0%';
+  }
+
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], value = '', quoted = false;
+    for (let i=0; i<text.length; i++) {
+      const c = text[i], n = text[i+1];
+      if (quoted) {
+        if (c === '"' && n === '"') { value += '"'; i++; }
+        else if (c === '"') quoted = false;
+        else value += c;
+      } else {
+        if (c === '"') quoted = true;
+        else if (c === ',') { row.push(value); value=''; }
+        else if (c === '\n') { row.push(value.replace(/\r$/, '')); rows.push(row); row=[]; value=''; }
+        else value += c;
+      }
+    }
+    if (value.length || row.length) { row.push(value.replace(/\r$/, '')); rows.push(row); }
+    const clean = rows.filter(r => r.some(v => String(v).trim() !== ''));
+    if (!clean.length) return [];
+    const headers = clean[0].map(h => h.replace(/^\uFEFF/, '').trim());
+    return clean.slice(1).map((r, idx) => {
+      const obj = { __row: idx + 2 };
+      headers.forEach((h, i) => obj[h] = (r[i] ?? '').trim());
+      return obj;
+    });
+  }
+
+  function validateRows(rows) {
+    if (!rows.length) throw new Error('The CSV contains no data rows.');
+    const required = ['Name','Address'];
+    const missing = required.filter(k => !(k in rows[0]));
+    if (missing.length) throw new Error(`Missing required CSV columns: ${missing.join(', ')}`);
+  }
+
+  async function loadFile(file) {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    validateRows(rows);
+    state.rows = rows;
+    state.failures = [];
+    els.fileName.textContent = `${file.name} — ${rows.length} rows`;
+    els.previewBtn.disabled = false;
+    els.importBtn.disabled = false;
+    els.downloadFailures.disabled = true;
+    updateStats({total: rows.length});
+    setStatus('CSV loaded. Test the connection or preview the first rows.');
+    log(`Loaded ${rows.length} rows from ${file.name}.`, 'info');
+  }
+
+  async function clickup(path, options={}) {
+    const token = els.token.value.trim();
+    if (!token) throw new Error('Enter your ClickUp API token.');
+    const headers = { Authorization: token, 'Content-Type':'application/json', ...(options.headers || {}) };
+    const response = await fetch(`${API}${path}`, { ...options, headers });
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw:text }; }
+    if (!response.ok) {
+      const detail = data?.err || data?.error || data?.message || data?.raw || `${response.status} ${response.statusText}`;
+      throw new Error(`ClickUp ${response.status}: ${detail}`);
+    }
+    return data;
+  }
+
+  async function getLocationField() {
+    const listId = els.listId.value.trim();
+    const wanted = els.fieldName.value.trim().toLowerCase();
+    if (!listId) throw new Error('Enter the ClickUp List ID.');
+    const data = await clickup(`/list/${encodeURIComponent(listId)}/field`);
+    const fields = data.fields || [];
+    const field = fields.find(f => String(f.name || '').trim().toLowerCase() === wanted);
+    if (!field) throw new Error(`No custom field named "${els.fieldName.value.trim()}" was found.`);
+    if (field.type !== 'location') throw new Error(`"${field.name}" exists, but its type is ${field.type}, not location.`);
+    return field;
+  }
+
+  async function geocode(address, row={}) {
+    const latRaw = row.Latitude ?? row.latitude ?? row.Lat ?? row.lat ?? '';
+    const lngRaw = row.Longitude ?? row.longitude ?? row.Lng ?? row.lng ?? row.Lon ?? row.lon ?? '';
+    const lat = Number(latRaw);
+    const lng = Number(lngRaw);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && latRaw !== '' && lngRaw !== '') {
+      return { lat, lng, formatted: address };
+    }
+    const key = els.googleKey.value.trim();
+    if (key) {
+      const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+      url.searchParams.set('address', address);
+      url.searchParams.set('key', key);
+      const r = await fetch(url);
+      const d = await r.json();
+      if (d.status !== 'OK' || !d.results?.length) throw new Error(`Google geocoding: ${d.status || 'address not found'}`);
+      const result = d.results[0];
+      return { lat: result.geometry.location.lat, lng: result.geometry.location.lng, formatted: result.formatted_address };
+    }
+    let lastError = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const url = new URL('https://nominatim.openstreetmap.org/search');
+        url.searchParams.set('q', address);
+        url.searchParams.set('format', 'jsonv2');
+        url.searchParams.set('limit', '1');
+        url.searchParams.set('countrycodes', 'mx');
+        const r = await fetch(url, { headers: { 'Accept-Language':'en' } });
+        if (!r.ok) throw new Error(`OpenStreetMap geocoding ${r.status}`);
+        const d = await r.json();
+        if (!d.length) throw new Error('Address not found by OpenStreetMap');
+        await sleep(1200);
+        return { lat: Number(d[0].lat), lng: Number(d[0].lon), formatted: d[0].display_name || address };
+      } catch (e) {
+        lastError = e;
+        if (attempt < 3) await sleep(1200 * attempt);
+      }
+    }
+    throw new Error(lastError?.message || 'Address not found by available geocoders');
+  }
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  async function createTask(row) {
+    const description = [
+      `Status: ${row.Description || ''}`,
+      `Address: ${row.Address || ''}`,
+      `City: ${row.City || ''}`,
+      `State: ${row.State || ''}`,
+      `Postal Code: ${row['Postal Code'] || ''}`,
+      `Country: ${row.Country || ''}`
+    ].join('\n');
+    return clickup(`/list/${encodeURIComponent(els.listId.value.trim())}/task`, {
+      method: 'POST',
+      body: JSON.stringify({ name: row.Name || 'Unnamed Store', description })
+    });
+  }
+
+  async function setLocation(taskId, fieldId, geo) {
+    return clickup(`/task/${encodeURIComponent(taskId)}/field/${encodeURIComponent(fieldId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ value: { location: { lat: geo.lat, lng: geo.lng }, formatted_address: geo.formatted } })
+    });
+  }
+
+  async function getExistingTaskNames() {
+    const names = new Set();
+    let page = 0;
+    while (page < 100) {
+      const data = await clickup(`/list/${encodeURIComponent(els.listId.value.trim())}/task?archived=false&page=${page}&subtasks=true`);
+      const tasks = data.tasks || [];
+      tasks.forEach(t => names.add(String(t.name || '').trim().toLowerCase()));
+      if (tasks.length < 100) break;
+      page++;
+    }
+    return names;
+  }
+
+  async function testConnection() {
+    try {
+      setStatus('Testing ClickUp connection...');
+      const field = await getLocationField();
+      log(`Connection successful. Found Location field ID ${field.id}.`, 'ok');
+      setStatus(`Connected. Location field found: ${field.name}`);
+    } catch (e) {
+      log(e.message, 'bad');
+      setStatus(e.message);
+    }
+  }
+
+  function preview() {
+    if (!state.rows.length) return;
+    const sample = state.rows.slice(0,5).map(r => `${r.Name} | ${r.Address}`).join('\n');
+    log(`CSV preview:\n${sample}`, 'info');
+  }
+
+  async function runImport() {
+    if (state.running) return;
+    try {
+      state.stopped = false;
+      state.failures = [];
+      setRunning(true);
+      els.downloadFailures.disabled = true;
+      const field = await getLocationField();
+      log(`Using Location field ${field.id}.`, 'ok');
+
+      if (els.skipDuplicates.checked) {
+        setStatus('Loading existing ClickUp task names...');
+        state.existingNames = await getExistingTaskNames();
+        log(`Loaded ${state.existingNames.size} existing task names.`, 'info');
+      } else state.existingNames = null;
+
+      const rows = els.dryRun.checked ? state.rows.slice(0,1) : state.rows;
+      let processed=0, created=0, skipped=0, failed=0;
+      updateStats({processed, created, skipped, failed, total: rows.length});
+
+      for (const row of rows) {
+        if (state.stopped) { log('Import stopped by user.', 'warn'); break; }
+        const name = String(row.Name || '').trim();
+        const address = String(row.Address || '').trim();
+        const country = String(row.Country || 'Mexico').trim();
+        const fullAddress = country && !address.toLowerCase().includes(country.toLowerCase()) ? `${address}, ${country}` : address;
+        setStatus(`Processing ${processed + 1} of ${rows.length}: ${name}`);
+
+        if (!name || !address) {
+          failed++; processed++;
+          state.failures.push({ row: row.__row, name, address, reason:'Missing Name or Address' });
+          log(`FAIL ${name || '(unnamed)'} — missing Name or Address.`, 'bad');
+          updateStats({processed, created, skipped, failed, total:rows.length});
+          continue;
+        }
+        if (state.existingNames?.has(name.toLowerCase())) {
+          skipped++; processed++;
+          log(`SKIP ${name} — task name already exists.`, 'warn');
+          updateStats({processed, created, skipped, failed, total:rows.length});
+          continue;
+        }
+
+        let task = null;
+        try {
+          const geo = await geocode(fullAddress, row);
+          task = await createTask(row);
+          await setLocation(task.id, field.id, geo);
+          created++;
+          if (state.existingNames) state.existingNames.add(name.toLowerCase());
+          log(`OK ${name} — task ${task.id}`, 'ok');
+        } catch (e) {
+          failed++;
+          state.failures.push({ row: row.__row, name, address:fullAddress, task_id:task?.id || '', reason:e.message });
+          log(`FAIL ${name} — ${e.message}`, 'bad');
+        }
+        processed++;
+        updateStats({processed, created, skipped, failed, total:rows.length});
+      }
+
+      els.downloadFailures.disabled = !state.failures.length;
+      setStatus(state.stopped ? 'Import stopped.' : `Finished: ${created} created, ${skipped} skipped, ${failed} failed.`);
+      log(state.stopped ? 'Stopped.' : 'Import complete.', state.stopped ? 'warn' : 'ok');
+    } catch (e) {
+      log(e.message, 'bad');
+      setStatus(e.message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function downloadFailures() {
+    if (!state.failures.length) return;
+    const headers = ['row','name','address','task_id','reason'];
+    const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+    const csv = [headers.join(','), ...state.failures.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'clickup_location_import_failures.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  els.csvFile.addEventListener('change', e => { const f=e.target.files[0]; if (f) loadFile(f).catch(err => {log(err.message,'bad'); setStatus(err.message);}); });
+  ['dragenter','dragover'].forEach(evt => els.drop.addEventListener(evt, e => { e.preventDefault(); els.drop.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => els.drop.addEventListener(evt, e => { e.preventDefault(); els.drop.classList.remove('drag'); }));
+  els.drop.addEventListener('drop', e => { const f=e.dataTransfer.files[0]; if (f) loadFile(f).catch(err => {log(err.message,'bad'); setStatus(err.message);}); });
+  els.testBtn.addEventListener('click', testConnection);
+  els.previewBtn.addEventListener('click', preview);
+  els.importBtn.addEventListener('click', runImport);
+  els.stopBtn.addEventListener('click', () => { state.stopped=true; els.stopBtn.disabled=true; setStatus('Stopping after the current store...'); });
+  els.downloadFailures.addEventListener('click', downloadFailures);
+})();
+</script>
+</body>
+</html>
